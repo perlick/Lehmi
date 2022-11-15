@@ -1,0 +1,12 @@
+{
+    "version": "2.0.0",
+    "tasks": [{
+        "label": "copy-elf-to-remote",
+        "command": "scp", 
+        "args": [
+            "./build/Lehmi_bb.elf",
+            "rpi:/tmp/executable.elf"
+        ],
+        "type": "shell"
+    }]
+}
