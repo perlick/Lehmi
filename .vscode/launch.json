@@ -6,7 +6,7 @@
     "configurations": [
         {
             "cwd": "${workspaceFolder}",
-            "executable": "./build/Lehmi_bb.elf",
+            "executable": "./build/lemhi.elf",
             "name": "remote Debug",
             "request": "launch",
             "type": "cortex-debug",

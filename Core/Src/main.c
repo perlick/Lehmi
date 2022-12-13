@@ -22,7 +22,6 @@
 void SystemClock_Config(void);
 
 volatile int testSeconds = 0;
-volatile int testBiSeconds = 0;
 
 int main(void)
 {
@@ -30,14 +29,13 @@ int main(void)
 
   SystemClock_Config();
 
+  
+
   while (1)
   {
     HAL_Delay(1000);
     testSeconds++;
-    if(testSeconds % 2 == 0)
-    {
-      testBiSeconds++;
-    }
+    // read 8 bits srating from 0x4800 0000
   }
 }
 
