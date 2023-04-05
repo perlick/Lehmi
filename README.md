@@ -11,6 +11,16 @@ I got the official arm toolchain from https://developer.arm.com/downloads/-/arm-
 ## GDB client
 This should be installed with the arm toolchain. I'm using the vscode extension 'cortex-debug' by Marus25. to integrate with vscode.
 
+To run the GDB client from the command line, invoke with `arm-none-eabi-gdb` then connect to GDB server `target remote 192.168.0.30:3333`. Then yu can load and run a program by
+```
+(gdb) file <client side elf file>
+(gdb) monitor reset halt
+(gdb) monitor flash protect 0 0 15 off
+(gdb) monitor stm32f0x mass_erase 0
+(gdb) monitor flash write_image /tmp/executable.elf
+(gdb) monitor reset halt
+```
+
 ## GDB Server (OpenOCD)
 The last component to this toolchain is openocd. OpenOCD can communicate with the STLink to access the microcontroller over the SWD(?) interface. It can also recieve commands from the GDB clint that tell it to grab certain values etc.
 

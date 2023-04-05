@@ -5,7 +5,7 @@
         "command": "scp", 
         "args": [
             "./build/lemhi.elf",
-            "rpi:/tmp/executable.elf"
+            "rpi-eth:/tmp/executable.elf"
         ],
         "type": "shell"
     }]

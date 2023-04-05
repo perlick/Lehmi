@@ -21,23 +21,68 @@
 
 void SystemClock_Config(void);
 
-volatile int testSeconds = 0;
+ADC_HandleTypeDef hadc1;
+__IO uint16_t ADCValue=0;
 
 int main(void)
 {
   HAL_Init();
-
   SystemClock_Config();
 
-  
 
+  // HAL_ADC_Init(&hadc);
+  HAL_ADC_Start(&hadc1);
   while (1)
   {
-    HAL_Delay(1000);
-    testSeconds++;
-    // read 8 bits srating from 0x4800 0000
+    if (HAL_ADC_PollForConversion(&hadc1, 1000000) == HAL_OK)
+    {
+        ADCValue = HAL_ADC_GetValue(&hadc1);
+    }
+    // HAL_ADC_PollForConversion(&hadc, HAL_MAX_DELAY);
+    // raw = HAL_ADC_GetValue(&hadc);
+    HAL_Delay(5);
+    // volatile uint32_t c = *(uint32_t *)0x40012440;
+    // turn on ADC
+    // my_ADC_init();
+    
+    // read temp from sensor
+
+    // write to sd card
   }
 }
+
+
+
+// void my_ADC_init(void)
+// {
+//   // ADRDY
+//   // char * p = (char *)0x40012400;
+//   // *p = 0x1;
+
+//   //ADCAL
+//   p = (uint32_t *)0x40012408;
+//   *p |= (1 << 31);
+
+//   volatile int count = 0;
+//   while ((*p & (1 << 31)) == (1 << 31))
+//   {
+//     count++;
+//   }
+//   c = *(uint32_t *)0x40012440;
+
+//   // ADEN
+//   p = (uint32_t *)0x40012408;
+//   *p |= 1;
+//   // c = *p;
+
+//   p = (uint32_t *)0x40012400;
+//   while ((*p & 1) == 0)
+//   {
+//   }
+//   c = *p;
+
+// }
+
 
 /**
   * @brief System Clock Configuration
