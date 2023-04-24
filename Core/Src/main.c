@@ -20,69 +20,35 @@
 #include "main.h"
 
 void SystemClock_Config(void);
+void ADC_Config(void);
+// void GPIO_Config(void);
 
-ADC_HandleTypeDef hadc1;
+ADC_HandleTypeDef hadc;
+// GPIO_TypeDef GPIOx;
+// GPIO_InitTypeDef GPIO_Init;
+
 __IO uint16_t ADCValue=0;
 
 int main(void)
 {
   HAL_Init();
   SystemClock_Config();
+  ADC_Config();
 
-
-  // HAL_ADC_Init(&hadc);
-  HAL_ADC_Start(&hadc1);
   while (1)
   {
-    if (HAL_ADC_PollForConversion(&hadc1, 1000000) == HAL_OK)
+    HAL_ADC_Start(&hadc);
+    if (HAL_ADC_PollForConversion(&hadc, 10000) == HAL_OK)
     {
-        ADCValue = HAL_ADC_GetValue(&hadc1);
+        ADCValue = HAL_ADC_GetValue(&hadc);
     }
-    // HAL_ADC_PollForConversion(&hadc, HAL_MAX_DELAY);
-    // raw = HAL_ADC_GetValue(&hadc);
     HAL_Delay(5);
-    // volatile uint32_t c = *(uint32_t *)0x40012440;
-    // turn on ADC
-    // my_ADC_init();
     
     // read temp from sensor
 
     // write to sd card
   }
 }
-
-
-
-// void my_ADC_init(void)
-// {
-//   // ADRDY
-//   // char * p = (char *)0x40012400;
-//   // *p = 0x1;
-
-//   //ADCAL
-//   p = (uint32_t *)0x40012408;
-//   *p |= (1 << 31);
-
-//   volatile int count = 0;
-//   while ((*p & (1 << 31)) == (1 << 31))
-//   {
-//     count++;
-//   }
-//   c = *(uint32_t *)0x40012440;
-
-//   // ADEN
-//   p = (uint32_t *)0x40012408;
-//   *p |= 1;
-//   // c = *p;
-
-//   p = (uint32_t *)0x40012400;
-//   while ((*p & 1) == 0)
-//   {
-//   }
-//   c = *p;
-
-// }
-
 
 /**
   * @brief System Clock Configuration
@@ -109,15 +75,56 @@ void SystemClock_Config(void)
   */
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1;
-  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
-  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI; // HSI at 8Mhz
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1; // AHB 8Mhz
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1; // APB 8Mhz
 
   if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
   {
     Error_Handler();
   }
 }
+
+void ADC_Config()
+{
+  hadc.Instance = ADC1;
+  hadc.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
+  hadc.Init.Resolution = ADC_RESOLUTION_12B;
+  hadc.Init.DataAlign = ADC_DATAALIGN_RIGHT;
+  hadc.Init.ScanConvMode = ADC_SCAN_DIRECTION_FORWARD;
+  hadc.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
+  hadc.Init.LowPowerAutoWait = DISABLE;
+  hadc.Init.LowPowerAutoPowerOff = DISABLE;
+  hadc.Init.ContinuousConvMode = DISABLE;
+  hadc.Init.DiscontinuousConvMode = DISABLE;
+  hadc.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+  hadc.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
+  hadc.Init.DMAContinuousRequests = DISABLE;
+  hadc.Init.Overrun = ADC_OVR_DATA_PRESERVED;
+  if (HAL_ADC_Init(&hadc) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  // hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV2; // 4 Mhz
+}
+
+void HAL_ADC_MspInit(ADC_HandleTypeDef* hadc)
+{
+  __HAL_RCC_ADC1_CLK_ENABLE();
+}
+
+// void GPIO_Config()
+// {
+//   __HAL_RCC_GPIOA_CLK_ENABLE();
+//   GPIO_Init.Pin = GPIO_PIN_14;
+//   GPIO_Init.Mode = GPIO_MODE_ANALOG;
+//   GPIO_Init.Pull = GPIO_NOPULL;
+//   GPIO_Init.Speed = GPIO_SPEED_FREQ_LOW;
+//   // GPIO_Init.Alternate = ;
+
+//   HAL_GPIO_Init(&GPIOx, &GPIO_Init);
+// }
 
 /* USER CODE BEGIN 4 */
 
