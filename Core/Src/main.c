@@ -21,27 +21,35 @@
 
 void SystemClock_Config(void);
 void ADC_Config(void);
-// void GPIO_Config(void);
+void GPIO_Config(void);
 
 ADC_HandleTypeDef hadc;
-// GPIO_TypeDef GPIOx;
-// GPIO_InitTypeDef GPIO_Init;
+GPIO_InitTypeDef GPIO_Init;
 
 __IO uint16_t ADCValue=0;
+__IO float temp_c=0;
 
 int main(void)
 {
   HAL_Init();
   SystemClock_Config();
+  // GPIO_Config();
   ADC_Config();
 
   while (1)
   {
+    HAL_ADCEx_Calibration_Start(&hadc);
     HAL_ADC_Start(&hadc);
-    if (HAL_ADC_PollForConversion(&hadc, 10000) == HAL_OK)
+    if (HAL_ADC_PollForConversion(&hadc, 5000) == HAL_OK)
     {
-        ADCValue = HAL_ADC_GetValue(&hadc);
+      ADCValue = HAL_ADC_GetValue(&hadc);
+      uint16_t TS_CAL1 = *(uint16_t*) (0x1FFFF7B8U); //1759
+      int32_t TS_CAL1_TEMP = 30;
+      uint16_t TS_CAL2 = 1802; 
+      int32_t TS_CAL2_TEMP = 20; // room 
+      temp_c = (float)(TS_CAL2_TEMP - TS_CAL1_TEMP)/(TS_CAL2 - TS_CAL1) * (ADCValue - TS_CAL1) + TS_CAL1_TEMP;
     }
+    HAL_ADC_Stop(&hadc);
     HAL_Delay(5);
     
     // read temp from sensor
@@ -88,7 +96,7 @@ void SystemClock_Config(void)
 void ADC_Config()
 {
   hadc.Instance = ADC1;
-  hadc.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4;
+  hadc.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV4; // 2Mhz
   hadc.Init.Resolution = ADC_RESOLUTION_12B;
   hadc.Init.DataAlign = ADC_DATAALIGN_RIGHT;
   hadc.Init.ScanConvMode = ADC_SCAN_DIRECTION_FORWARD;
@@ -106,7 +114,12 @@ void ADC_Config()
     Error_Handler();
   }
 
-  // hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV2; // 4 Mhz
+  ADC_ChannelConfTypeDef sConfig;
+  sConfig.Channel = ADC_CHANNEL_TEMPSENSOR;
+  sConfig.Rank = ADC_RANK_CHANNEL_NUMBER;
+  sConfig.SamplingTime = ADC_SAMPLETIME_239CYCLES_5;
+  HAL_ADC_ConfigChannel(&hadc, &sConfig);
+
 }
 
 void HAL_ADC_MspInit(ADC_HandleTypeDef* hadc)
@@ -114,17 +127,17 @@ void HAL_ADC_MspInit(ADC_HandleTypeDef* hadc)
   __HAL_RCC_ADC1_CLK_ENABLE();
 }
 
-// void GPIO_Config()
-// {
-//   __HAL_RCC_GPIOA_CLK_ENABLE();
-//   GPIO_Init.Pin = GPIO_PIN_14;
-//   GPIO_Init.Mode = GPIO_MODE_ANALOG;
-//   GPIO_Init.Pull = GPIO_NOPULL;
-//   GPIO_Init.Speed = GPIO_SPEED_FREQ_LOW;
-//   // GPIO_Init.Alternate = ;
+void GPIO_Config()
+{
+  __HAL_RCC_GPIOA_CLK_ENABLE();
+  GPIO_Init.Pin = GPIO_PIN_14;
+  GPIO_Init.Mode = GPIO_MODE_ANALOG;
+  GPIO_Init.Pull = GPIO_NOPULL;
+  GPIO_Init.Speed = GPIO_SPEED_FREQ_LOW;
+  // GPIO_Init.Alternate;
 
-//   HAL_GPIO_Init(&GPIOx, &GPIO_Init);
-// }
+  HAL_GPIO_Init(GPIOA, &GPIO_Init);
+}
 
 /* USER CODE BEGIN 4 */
 
