@@ -21,40 +21,82 @@
 
 void SystemClock_Config(void);
 void ADC_Config(void);
-void GPIO_Config(void);
+void TMP_Config(void);
+void SPI_Config(void);
 
 ADC_HandleTypeDef hadc;
 GPIO_InitTypeDef GPIO_Init;
+SPI_HandleTypeDef hspi;
 
 __IO uint16_t ADCValue=0;
 __IO float temp_c=0;
+__IO uint8_t byte;
+
+#define noop
 
 int main(void)
 {
   HAL_Init();
   SystemClock_Config();
-  // GPIO_Config();
+  TMP_Config();
   ADC_Config();
+  SPI_Config();
+
+  int num_bytes = 42;
+
+  uint8_t tx_data[num_bytes];
+  uint8_t rx_data[num_bytes];
 
   while (1)
   {
-    HAL_ADCEx_Calibration_Start(&hadc);
-    HAL_ADC_Start(&hadc);
-    if (HAL_ADC_PollForConversion(&hadc, 5000) == HAL_OK)
-    {
-      ADCValue = HAL_ADC_GetValue(&hadc);
-      uint16_t TS_CAL1 = *(uint16_t*) (0x1FFFF7B8U); //1759
-      int32_t TS_CAL1_TEMP = 30;
-      uint16_t TS_CAL2 = 1802; 
-      int32_t TS_CAL2_TEMP = 20; // room 
-      temp_c = (float)(TS_CAL2_TEMP - TS_CAL1_TEMP)/(TS_CAL2 - TS_CAL1) * (ADCValue - TS_CAL1) + TS_CAL1_TEMP;
-    }
-    HAL_ADC_Stop(&hadc);
-    HAL_Delay(5);
+    // HAL_ADCEx_Calibration_Start(&hadc);
+    // HAL_ADC_Start(&hadc);
+    // if (HAL_ADC_PollForConversion(&hadc, 5000) == HAL_OK)
+    // {
+    //   ADCValue = HAL_ADC_GetValue(&hadc);
+    //   uint16_t TS_CAL1 = 600;
+    //   int32_t TS_CAL1_TEMP = 30;
+    //   uint16_t TS_CAL2 = 520;
+    //   int32_t TS_CAL2_TEMP = 20; // room
+    //   temp_c = (float)(TS_CAL2_TEMP - TS_CAL1_TEMP)/(TS_CAL2 - TS_CAL1) * (ADCValue - TS_CAL1) + TS_CAL1_TEMP;
+    // }
+    // HAL_ADC_Stop(&hadc);
+    // HAL_Delay(5);
     
     // read temp from sensor
-
     // write to sd card
+    tx_data[0] = tx_data[0];
+    
+    for (int i = 0; i < num_bytes; i++){
+      tx_data[i] = 0;
+      rx_data[i] = 0;
+    }
+    // 0-19 sync
+    for (int i = 0; i < 20; i++){
+      tx_data[i] = 0xff;
+    }
+
+    // CMD0 20-26
+    tx_data[20] = 0x40;
+    tx_data[25] = 0x95;
+    tx_data[26] = 0xFF;
+    tx_data[27] = 0xFF;
+
+    // CMD8 27 - 38
+    tx_data[28] = 0b01001000;
+    tx_data[31] = 0b00000001; //30
+    tx_data[32] = 0b10101010; //31
+    tx_data[33] = 0b10000111; //32
+    for (int i = 0; i < 7; i++){
+      tx_data[i+34] = 0xFF;
+    }
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_SET);
+    for (int i = 0; i < num_bytes; i++){
+      HAL_StatusTypeDef res = HAL_SPI_TransmitReceive(&hspi, &tx_data[i], &rx_data[i], 1, 5000);
+      if (i==19){
+        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_RESET);
+      }
+    }
   }
 }
 
@@ -115,7 +157,7 @@ void ADC_Config()
   }
 
   ADC_ChannelConfTypeDef sConfig;
-  sConfig.Channel = ADC_CHANNEL_TEMPSENSOR;
+  sConfig.Channel = ADC_CHANNEL_0;
   sConfig.Rank = ADC_RANK_CHANNEL_NUMBER;
   sConfig.SamplingTime = ADC_SAMPLETIME_239CYCLES_5;
   HAL_ADC_ConfigChannel(&hadc, &sConfig);
@@ -127,16 +169,55 @@ void HAL_ADC_MspInit(ADC_HandleTypeDef* hadc)
   __HAL_RCC_ADC1_CLK_ENABLE();
 }
 
-void GPIO_Config()
+void TMP_Config()
 {
   __HAL_RCC_GPIOA_CLK_ENABLE();
-  GPIO_Init.Pin = GPIO_PIN_14;
+  GPIO_Init.Pin = GPIO_PIN_0;
   GPIO_Init.Mode = GPIO_MODE_ANALOG;
   GPIO_Init.Pull = GPIO_NOPULL;
   GPIO_Init.Speed = GPIO_SPEED_FREQ_LOW;
-  // GPIO_Init.Alternate;
-
   HAL_GPIO_Init(GPIOA, &GPIO_Init);
+}
+
+void SPI_Config()
+{
+  hspi.Instance = SPI2;
+  hspi.Init.Mode = SPI_MODE_MASTER;
+  hspi.Init.Direction = SPI_DIRECTION_2LINES;
+  hspi.Init.DataSize = SPI_DATASIZE_8BIT;
+  hspi.Init.CLKPolarity = SPI_POLARITY_LOW;
+  hspi.Init.CLKPhase = SPI_PHASE_1EDGE;
+  hspi.Init.NSS = SPI_NSS_SOFT;
+  hspi.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_64;
+  hspi.Init.FirstBit = SPI_FIRSTBIT_MSB;
+  hspi.Init.TIMode = SPI_TIMODE_DISABLE;
+  hspi.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
+  HAL_SPI_Init(&hspi);
+
+  GPIO_Init.Pin = GPIO_PIN_12;
+  GPIO_Init.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_Init.Pull = GPIO_NOPULL;
+  GPIO_Init.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOB, &GPIO_Init);
+}
+
+void HAL_SPI_MspInit(SPI_HandleTypeDef *hspi)
+{
+  __HAL_RCC_SPI2_CLK_ENABLE();
+
+  __HAL_RCC_GPIOB_CLK_ENABLE();
+  GPIO_Init.Pin = GPIO_PIN_12;
+  GPIO_Init.Mode = GPIO_MODE_AF_PP;
+  HAL_GPIO_Init(GPIOB, &GPIO_Init);
+  GPIO_Init.Pin = GPIO_PIN_13;
+  GPIO_Init.Mode = GPIO_MODE_AF_PP;
+  HAL_GPIO_Init(GPIOB, &GPIO_Init);
+  GPIO_Init.Pin = GPIO_PIN_14;
+  GPIO_Init.Mode = GPIO_MODE_AF_PP;
+  HAL_GPIO_Init(GPIOB, &GPIO_Init);
+  GPIO_Init.Pin = GPIO_PIN_15;
+  GPIO_Init.Mode = GPIO_MODE_AF_PP;
+  HAL_GPIO_Init(GPIOB, &GPIO_Init);
 }
 
 /* USER CODE BEGIN 4 */

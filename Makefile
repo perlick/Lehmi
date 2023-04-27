@@ -56,6 +56,7 @@ Drivers/STM32F0xx_HAL_Driver/Src/stm32f0xx_hal_pwr_ex.c \
 Drivers/STM32F0xx_HAL_Driver/Src/stm32f0xx_hal_flash.c \
 Drivers/STM32F0xx_HAL_Driver/Src/stm32f0xx_hal_flash_ex.c \
 Drivers/STM32F0xx_HAL_Driver/Src/stm32f0xx_hal_exti.c \
+Drivers/STM32F0xx_HAL_Driver/Src/stm32f0xx_hal_spi.c \
 Core/Src/system_stm32f0xx.c  
 
 # ASM sources
