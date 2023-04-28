@@ -47,6 +47,8 @@ int main(void)
   uint8_t tx_data[num_bytes];
   uint8_t rx_data[num_bytes];
 
+  sd_raw_init(&hspi, GPIOB, GPIO_PIN_12);
+
   while (1)
   {
     // HAL_ADCEx_Calibration_Start(&hadc);
@@ -65,38 +67,6 @@ int main(void)
     
     // read temp from sensor
     // write to sd card
-    tx_data[0] = tx_data[0];
-    
-    for (int i = 0; i < num_bytes; i++){
-      tx_data[i] = 0;
-      rx_data[i] = 0;
-    }
-    // 0-19 sync
-    for (int i = 0; i < 20; i++){
-      tx_data[i] = 0xff;
-    }
-
-    // CMD0 20-26
-    tx_data[20] = 0x40;
-    tx_data[25] = 0x95;
-    tx_data[26] = 0xFF;
-    tx_data[27] = 0xFF;
-
-    // CMD8 27 - 38
-    tx_data[28] = 0b01001000;
-    tx_data[31] = 0b00000001; //30
-    tx_data[32] = 0b10101010; //31
-    tx_data[33] = 0b10000111; //32
-    for (int i = 0; i < 7; i++){
-      tx_data[i+34] = 0xFF;
-    }
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_SET);
-    for (int i = 0; i < num_bytes; i++){
-      HAL_StatusTypeDef res = HAL_SPI_TransmitReceive(&hspi, &tx_data[i], &rx_data[i], 1, 5000);
-      if (i==19){
-        HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_RESET);
-      }
-    }
   }
 }
 
@@ -219,10 +189,6 @@ void HAL_SPI_MspInit(SPI_HandleTypeDef *hspi)
   GPIO_Init.Mode = GPIO_MODE_AF_PP;
   HAL_GPIO_Init(GPIOB, &GPIO_Init);
 }
-
-/* USER CODE BEGIN 4 */
-
-/* USER CODE END 4 */
 
 /**
   * @brief  This function is executed in case of error occurrence.
