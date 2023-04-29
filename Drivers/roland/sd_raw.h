@@ -129,13 +129,13 @@ uint8_t sd_raw_init(SPI_HandleTypeDef *hspi, GPIO_TypeDef* GPIOx, uint16_t GPIO_
 uint8_t sd_raw_available();
 uint8_t sd_raw_locked();
 
-uint8_t sd_raw_read(offset_t offset, uint8_t* buffer, uintptr_t length);
-uint8_t sd_raw_read_interval(offset_t offset, uint8_t* buffer, uintptr_t interval, uintptr_t length, sd_raw_read_interval_handler_t callback, void* p);
-uint8_t sd_raw_write(offset_t offset, const uint8_t* buffer, uintptr_t length);
-uint8_t sd_raw_write_interval(offset_t offset, uint8_t* buffer, uintptr_t length, sd_raw_write_interval_handler_t callback, void* p);
+uint8_t sd_raw_read(SPI_HandleTypeDef *hspi, GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin, offset_t offset, uint8_t* buffer, uintptr_t length);
+uint8_t sd_raw_read_interval(SPI_HandleTypeDef *hspi, GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin, offset_t offset, uint8_t* buffer, uintptr_t interval, uintptr_t length, sd_raw_read_interval_handler_t callback, void* p);
+uint8_t sd_raw_write(SPI_HandleTypeDef *hspi, GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin, offset_t offset, const uint8_t* buffer, uintptr_t length);
+uint8_t sd_raw_write_interval(SPI_HandleTypeDef *hspi, GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin, offset_t offset, uint8_t* buffer, uintptr_t length, sd_raw_write_interval_handler_t callback, void* p);
 uint8_t sd_raw_sync();
 
-uint8_t sd_raw_get_info(struct sd_raw_info* info);
+uint8_t sd_raw_get_info(SPI_HandleTypeDef *hspi, GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin, struct sd_raw_info* info);
 
 /**
  * @}

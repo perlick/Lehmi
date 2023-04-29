@@ -41,16 +41,21 @@ int main(void)
   TMP_Config();
   ADC_Config();
   SPI_Config();
+  
+  uint8_t tx_buffer[512];
+  uint8_t rx_buffer[512];
 
-  int num_bytes = 42;
-
-  uint8_t tx_data[num_bytes];
-  uint8_t rx_data[num_bytes];
 
   sd_raw_init(&hspi, GPIOB, GPIO_PIN_12);
 
+  int i = 0;
   while (1)
   {
+    tx_buffer[i] = i % 255;
+    sd_raw_read(&hspi, GPIOB, GPIO_PIN_12, i*512, rx_buffer, 512);
+    sd_raw_write(&hspi, GPIOB, GPIO_PIN_12, i*512, tx_buffer, 512);
+    i++;
+
     // HAL_ADCEx_Calibration_Start(&hadc);
     // HAL_ADC_Start(&hadc);
     // if (HAL_ADC_PollForConversion(&hadc, 5000) == HAL_OK)
