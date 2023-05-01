@@ -158,15 +158,8 @@ static uint8_t raw_block_written;
 /* card type state */
 static uint8_t sd_raw_card_type;
 
-/* interface functions */
-void unselect_card(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin);
-void select_card(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin);
-
 /* internal helpers*/
-static void sd_raw_send_byte(SPI_HandleTypeDef *hspi, uint8_t tx_data);
-static uint8_t sd_raw_rec_byte(SPI_HandleTypeDef *hspi);
-static uint8_t sd_raw_send_command(SPI_HandleTypeDef *hspi, uint8_t command, uint32_t arg);
-void set_freq_high(SPI_HandleTypeDef *hspi);
+static uint8_t sd_raw_send_command(SD_Device* device, uint8_t command, uint32_t arg);
 
 /**
  * \ingroup sd_raw
@@ -174,9 +167,9 @@ void set_freq_high(SPI_HandleTypeDef *hspi);
  *
  * \returns 0 on failure, 1 on success.
  */
-uint8_t sd_raw_init(SPI_HandleTypeDef *hspi, GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin)
+uint8_t sd_raw_init(SD_Device* device)
 {
-    unselect_card(GPIOx, GPIO_Pin);
+    device->unselect_card(device->hal_resource);
 
     /* initialization procedure */
     sd_raw_card_type = 0;
@@ -188,37 +181,37 @@ uint8_t sd_raw_init(SPI_HandleTypeDef *hspi, GPIO_TypeDef* GPIOx, uint16_t GPIO_
     for(uint8_t i = 0; i < 10; ++i)
     {
         /* wait 8 clock cycles */
-        sd_raw_rec_byte(hspi);
+        device->sd_raw_rec_byte(device->hal_resource);
     }
 
     /* address card */
-    select_card(GPIOx, GPIO_Pin);
+    device->select_card(device->hal_resource);;
 
     /* reset card */
     uint8_t response;
     for(uint16_t i = 0; ; ++i)
     {
-        response = sd_raw_send_command(hspi, CMD_GO_IDLE_STATE, 0);
+        response = sd_raw_send_command(device, CMD_GO_IDLE_STATE, 0);
         if(response == (1 << R1_IDLE_STATE))
             break;
 
         if(i == 0x1ff)
         {
-            unselect_card(GPIOx, GPIO_Pin);
+            device->unselect_card(device->hal_resource);;
             return 0;
         }
     }
 
 #if SD_RAW_SDHC
     /* check for version of SD card specification */
-    response = sd_raw_send_command(hspi, CMD_SEND_IF_COND, 0x100 /* 2.7V - 3.6V */ | 0xaa /* test pattern */);
+    response = sd_raw_send_command(device, CMD_SEND_IF_COND, 0x100 /* 2.7V - 3.6V */ | 0xaa /* test pattern */);
     if((response & (1 << R1_ILL_COMMAND)) == 0)
     {
-        sd_raw_rec_byte(hspi);
-        sd_raw_rec_byte(hspi);
-        if((sd_raw_rec_byte(hspi) & 0x01) == 0)
+        device->sd_raw_rec_byte(device->hal_resource);
+        device->sd_raw_rec_byte(device->hal_resource);
+        if((device->sd_raw_rec_byte(device->hal_resource) & 0x01) == 0)
             return 0; /* card operation voltage range doesn't match */
-        if(sd_raw_rec_byte(hspi) != 0xaa)
+        if(device->sd_raw_rec_byte(device->hal_resource) != 0xaa)
             return 0; /* wrong test pattern */
 
         /* card conforms to SD 2 card specification */
@@ -228,8 +221,8 @@ uint8_t sd_raw_init(SPI_HandleTypeDef *hspi, GPIO_TypeDef* GPIOx, uint16_t GPIO_
 #endif
     {
         /* determine SD/MMC card type */
-        sd_raw_send_command(hspi, CMD_APP, 0);
-        response = sd_raw_send_command(hspi, CMD_SD_SEND_OP_COND, 0);
+        sd_raw_send_command(device, CMD_APP, 0);
+        response = sd_raw_send_command(device, CMD_SD_SEND_OP_COND, 0);
         if((response & (1 << R1_ILL_COMMAND)) == 0)
         {
             /* card conforms to SD 1 card specification */
@@ -251,12 +244,12 @@ uint8_t sd_raw_init(SPI_HandleTypeDef *hspi, GPIO_TypeDef* GPIOx, uint16_t GPIO_
             if(sd_raw_card_type & (1 << SD_RAW_SPEC_2))
                 arg = 0x40000000;
 #endif
-            sd_raw_send_command(hspi, CMD_APP, 0);
-            response = sd_raw_send_command(hspi, CMD_SD_SEND_OP_COND, arg);
+            sd_raw_send_command(device, CMD_APP, 0);
+            response = sd_raw_send_command(device, CMD_SD_SEND_OP_COND, arg);
         }
         else
         {
-            response = sd_raw_send_command(hspi, CMD_SEND_OP_COND, 0);
+            response = sd_raw_send_command(device, CMD_SEND_OP_COND, 0);
         }
 
         if((response & (1 << R1_IDLE_STATE)) == 0)
@@ -264,7 +257,7 @@ uint8_t sd_raw_init(SPI_HandleTypeDef *hspi, GPIO_TypeDef* GPIOx, uint16_t GPIO_
 
         if(i == 0x7fff)
         {
-            unselect_card(GPIOx, GPIO_Pin);
+            device->unselect_card(device->hal_resource);;
             return 0;
         }
     }
@@ -272,33 +265,33 @@ uint8_t sd_raw_init(SPI_HandleTypeDef *hspi, GPIO_TypeDef* GPIOx, uint16_t GPIO_
 #if SD_RAW_SDHC
     if(sd_raw_card_type & (1 << SD_RAW_SPEC_2))
     {
-        if(sd_raw_send_command(hspi, CMD_READ_OCR, 0))
+        if(sd_raw_send_command(device, CMD_READ_OCR, 0))
         {
-            unselect_card(GPIOx, GPIO_Pin);
+            device->unselect_card(device->hal_resource);;
             return 0;
         }
 
-        if(sd_raw_rec_byte(hspi) & 0x40)
+        if(device->sd_raw_rec_byte(device->hal_resource) & 0x40)
             sd_raw_card_type |= (1 << SD_RAW_SPEC_SDHC);
 
-        sd_raw_rec_byte(hspi);
-        sd_raw_rec_byte(hspi);
-        sd_raw_rec_byte(hspi);
+        device->sd_raw_rec_byte(device->hal_resource);
+        device->sd_raw_rec_byte(device->hal_resource);
+        device->sd_raw_rec_byte(device->hal_resource);
     }
 #endif
 
     /* set block size to 512 bytes */
-    if(sd_raw_send_command(hspi, CMD_SET_BLOCKLEN, 512))
+    if(sd_raw_send_command(device, CMD_SET_BLOCKLEN, 512))
     {
-        unselect_card(GPIOx, GPIO_Pin);
+        device->unselect_card(device->hal_resource);;
         return 0;
     }
 
     /* deaddress card */
-    unselect_card(GPIOx, GPIO_Pin);
+    device->unselect_card(device->hal_resource);;
 
     /* switch to highest SPI frequency possible */
-    set_freq_high(hspi);
+    device->set_freq_high(device->hal_resource);
 
 #if !SD_RAW_SAVE_RAM
     /* the first block is likely to be accessed first, so precache it here */
@@ -306,26 +299,11 @@ uint8_t sd_raw_init(SPI_HandleTypeDef *hspi, GPIO_TypeDef* GPIOx, uint16_t GPIO_
 #if SD_RAW_WRITE_BUFFERING
     raw_block_written = 1;
 #endif
-    if(!sd_raw_read(hspi, GPIOx, GPIO_Pin, 0, raw_block, sizeof(raw_block)))
+    if(!sd_raw_read(device, 0, raw_block, sizeof(raw_block)))
         return 0;
 #endif
 
     return 1;
-}
-
-void unselect_card(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin)
-{
-  HAL_GPIO_WritePin(GPIOx, GPIO_Pin, GPIO_PIN_SET);
-}
-
-void select_card(GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin)
-{
-  HAL_GPIO_WritePin(GPIOx, GPIO_Pin, GPIO_PIN_RESET);
-}
-
-void set_freq_high(SPI_HandleTypeDef *hspi)
-{
-
 }
 
 /**
@@ -334,9 +312,9 @@ void set_freq_high(SPI_HandleTypeDef *hspi)
  *
  * \returns 1 if the card is available, 0 if it is not.
  */
-uint8_t sd_raw_available()
+uint8_t sd_raw_available(SD_Device* device)
 {
-    return 0x01;
+    return device->get_pin_available(device->hal_resource) == 0x00;
 }
 
 /**
@@ -345,38 +323,9 @@ uint8_t sd_raw_available()
  *
  * \returns 1 if the card is locked, 0 if it is not.
  */
-uint8_t sd_raw_locked()
+uint8_t sd_raw_locked(SD_Device* device)
 {
-    return 0x00;
-}
-
-/**
- * \ingroup sd_raw
- * Sends a raw byte to the memory card.
- *
- * \param[in] b The byte to sent.
- * \see sd_raw_rec_byte
- */
-void sd_raw_send_byte(SPI_HandleTypeDef *hspi, uint8_t tx_data)
-{
-    uint8_t rx_data = 0x00;
-    HAL_SPI_TransmitReceive(hspi, &tx_data, &rx_data, 1, 5000);
-}
-
-/**
- * \ingroup sd_raw
- * Receives a raw byte from the memory card.
- *
- * \returns The byte which should be read.
- * \see sd_raw_send_byte
- */
-uint8_t sd_raw_rec_byte(SPI_HandleTypeDef *hspi)
-{
-    /* send dummy data for receiving some */
-    uint8_t tx_data = 0xff;
-    uint8_t rx_data = 0x00;
-    HAL_SPI_TransmitReceive(hspi, &tx_data, &rx_data, 1, 5000);
-    return rx_data;
+    return device->get_pin_locked(device->hal_resource) == 0x00;
 }
 
 /**
@@ -387,36 +336,36 @@ uint8_t sd_raw_rec_byte(SPI_HandleTypeDef *hspi)
  * \param[in] arg The argument for command.
  * \returns The command answer.
  */
-uint8_t sd_raw_send_command(SPI_HandleTypeDef *hspi, uint8_t command, uint32_t arg)
+uint8_t sd_raw_send_command(SD_Device* device, uint8_t command, uint32_t arg)
 {
     uint8_t response;
 
     /* wait some clock cycles */
-    // sd_raw_rec_byte(hspi);
+    // device->sd_raw_rec_byte(device->hal_resource);
 
     /* send command via SPI */
-    sd_raw_send_byte(hspi, 0x40 | command);
-    sd_raw_send_byte(hspi, (arg >> 24) & 0xff);
-    sd_raw_send_byte(hspi, (arg >> 16) & 0xff);
-    sd_raw_send_byte(hspi, (arg >> 8) & 0xff);
-    sd_raw_send_byte(hspi, (arg >> 0) & 0xff);
+    device->sd_raw_send_byte(device->hal_resource, 0x40 | command);
+    device->sd_raw_send_byte(device->hal_resource, (arg >> 24) & 0xff);
+    device->sd_raw_send_byte(device->hal_resource, (arg >> 16) & 0xff);
+    device->sd_raw_send_byte(device->hal_resource, (arg >> 8) & 0xff);
+    device->sd_raw_send_byte(device->hal_resource, (arg >> 0) & 0xff);
     switch(command)
     {
         case CMD_GO_IDLE_STATE:
-           sd_raw_send_byte(hspi, 0x95);
+           device->sd_raw_send_byte(device->hal_resource, 0x95);
            break;
         case CMD_SEND_IF_COND:
-           sd_raw_send_byte(hspi, 0x87);
+           device->sd_raw_send_byte(device->hal_resource, 0x87);
            break;
         default:
-           sd_raw_send_byte(hspi, 0xff);
+           device->sd_raw_send_byte(device->hal_resource, 0xff);
            break;
     }
     
     /* receive response */
     for(uint8_t i = 0; i < 10; ++i)
     {
-        response = sd_raw_rec_byte(hspi);
+        response = device->sd_raw_rec_byte(device->hal_resource);
         if(response != 0xff && !(i == 0 && command == CMD_GO_IDLE_STATE && response != 0x63))
             break;
     }
@@ -434,8 +383,9 @@ uint8_t sd_raw_send_command(SPI_HandleTypeDef *hspi, uint8_t command, uint32_t a
  * \returns 0 on failure, 1 on success.
  * \see sd_raw_read_interval, sd_raw_write, sd_raw_write_interval
  */
-uint8_t sd_raw_read(SPI_HandleTypeDef *hspi, GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin, offset_t offset, uint8_t* buffer, uintptr_t length)
+uint8_t sd_raw_read(void* context, offset_t offset, uint8_t* buffer, uintptr_t length)
 {
+    SD_Device* device = (SD_Device*) context;
     offset_t block_address;
     uint16_t block_offset;
     uint16_t read_length;
@@ -459,28 +409,28 @@ uint8_t sd_raw_read(SPI_HandleTypeDef *hspi, GPIO_TypeDef *GPIOx, uint16_t GPIO_
 #endif
 
             /* address card */
-            select_card(GPIOx, GPIO_Pin);
+            device->select_card(device->hal_resource);
 
             /* send single block request */
 #if SD_RAW_SDHC
-            if(sd_raw_send_command(hspi, CMD_READ_SINGLE_BLOCK, (sd_raw_card_type & (1 << SD_RAW_SPEC_SDHC) ? block_address / 512 : block_address)))
+            if(sd_raw_send_command(device, CMD_READ_SINGLE_BLOCK, (sd_raw_card_type & (1 << SD_RAW_SPEC_SDHC) ? block_address / 512 : block_address)))
 #else
             if(sd_raw_send_command(CMD_READ_SINGLE_BLOCK, block_address))
 #endif
             {
-                unselect_card(GPIOx, GPIO_Pin);
+                device->unselect_card(device->hal_resource);;
                 return 0;
             }
 
             /* wait for data block (start byte 0xfe) */
-            while(sd_raw_rec_byte(hspi) != 0xfe);
+            while(device->sd_raw_rec_byte(device->hal_resource) != 0xfe);
 
 #if SD_RAW_SAVE_RAM
             /* read byte block */
             uint16_t read_to = block_offset + read_length;
             for(uint16_t i = 0; i < 512; ++i)
             {
-                uint8_t b = sd_raw_rec_byte(hspi);
+                uint8_t b = device->sd_raw_rec_byte(device->hal_resource);
                 if(i >= block_offset && i < read_to)
                     *buffer++ = b;
             }
@@ -488,7 +438,7 @@ uint8_t sd_raw_read(SPI_HandleTypeDef *hspi, GPIO_TypeDef *GPIOx, uint16_t GPIO_
             /* read byte block */
             uint8_t* cache = raw_block;
             for(uint16_t i = 0; i < 512; ++i)
-                *cache++ = sd_raw_rec_byte(hspi);
+                *cache++ = device->sd_raw_rec_byte(device->hal_resource);
             raw_block_address = block_address;
 
             memcpy(buffer, raw_block + block_offset, read_length);
@@ -496,14 +446,14 @@ uint8_t sd_raw_read(SPI_HandleTypeDef *hspi, GPIO_TypeDef *GPIOx, uint16_t GPIO_
 #endif
             
             /* read crc16 */
-            sd_raw_rec_byte(hspi);
-            sd_raw_rec_byte(hspi);
+            device->sd_raw_rec_byte(device->hal_resource);
+            device->sd_raw_rec_byte(device->hal_resource);
             
             /* deaddress card */
-            unselect_card(GPIOx, GPIO_Pin);
+            device->unselect_card(device->hal_resource);;
 
             /* let card some time to finish */
-            sd_raw_rec_byte(hspi);
+            device->sd_raw_rec_byte(device->hal_resource);
         }
 #if !SD_RAW_SAVE_RAM
         else
@@ -545,8 +495,9 @@ uint8_t sd_raw_read(SPI_HandleTypeDef *hspi, GPIO_TypeDef *GPIOx, uint16_t GPIO_
  * \returns 0 on failure, 1 on success
  * \see sd_raw_write_interval, sd_raw_read, sd_raw_write
  */
-uint8_t sd_raw_read_interval(SPI_HandleTypeDef *hspi, GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin, offset_t offset, uint8_t* buffer, uintptr_t interval, uintptr_t length, sd_raw_read_interval_handler_t callback, void* p)
+uint8_t sd_raw_read_interval(void* context, offset_t offset, uint8_t* buffer, uintptr_t interval, uintptr_t length, sd_raw_read_interval_handler_t callback, void* p)
 {
+    SD_Device* device = (SD_Device*) context;
     if(!buffer || interval == 0 || length < interval || !callback)
         return 0;
 
@@ -556,7 +507,7 @@ uint8_t sd_raw_read_interval(SPI_HandleTypeDef *hspi, GPIO_TypeDef *GPIOx, uint1
         /* as reading is now buffered, we directly
          * hand over the request to sd_raw_read()
          */
-        if(!sd_raw_read(hspi, GPIOx, GPIO_Pin, offset, buffer, interval))
+        if(!sd_raw_read(device, offset, buffer, interval))
             return 0;
         if(!callback(buffer, offset, p))
             break;
@@ -567,7 +518,7 @@ uint8_t sd_raw_read_interval(SPI_HandleTypeDef *hspi, GPIO_TypeDef *GPIOx, uint1
     return 1;
 #else
     /* address card */
-    select_card(GPIOx, GPIO_Pin);
+    device->select_card(device->hal_resource);;
 
     uint16_t block_offset;
     uint16_t read_length;
@@ -581,21 +532,21 @@ uint8_t sd_raw_read_interval(SPI_HandleTypeDef *hspi, GPIO_TypeDef *GPIOx, uint1
         
         /* send single block request */
 #if SD_RAW_SDHC
-        if(sd_raw_send_command(hspi, CMD_READ_SINGLE_BLOCK, (sd_raw_card_type & (1 << SD_RAW_SPEC_SDHC) ? offset / 512 : offset - block_offset)))
+        if(sd_raw_send_command(device, CMD_READ_SINGLE_BLOCK, (sd_raw_card_type & (1 << SD_RAW_SPEC_SDHC) ? offset / 512 : offset - block_offset)))
 #else
         if(sd_raw_send_command(CMD_READ_SINGLE_BLOCK, offset - block_offset))
 #endif
         {
-            unselect_card(GPIOx, GPIO_Pin);
+            device->unselect_card(device->hal_resource);;
             return 0;
         }
 
         /* wait for data block (start byte 0xfe) */
-        while(sd_raw_rec_byte(hspi) != 0xfe);
+        while(device->sd_raw_rec_byte(device->hal_resource) != 0xfe);
 
         /* read up to the data of interest */
         for(uint16_t i = 0; i < block_offset; ++i)
-            sd_raw_rec_byte(hspi);
+            device->sd_raw_rec_byte(device->hal_resource);
 
         /* read interval bytes of data and execute the callback */
         do
@@ -605,7 +556,7 @@ uint8_t sd_raw_read_interval(SPI_HandleTypeDef *hspi, GPIO_TypeDef *GPIOx, uint1
 
             buffer_cur = buffer;
             for(uint16_t i = 0; i < interval; ++i)
-                *buffer_cur++ = sd_raw_rec_byte(hspi);
+                *buffer_cur++ = device->sd_raw_rec_byte(device->hal_resource);
 
             if(!callback(buffer, offset + (512 - read_length), p))
             {
@@ -620,11 +571,11 @@ uint8_t sd_raw_read_interval(SPI_HandleTypeDef *hspi, GPIO_TypeDef *GPIOx, uint1
         
         /* read rest of data block */
         while(read_length-- > 0)
-            sd_raw_rec_byte(hspi);
+            device->sd_raw_rec_byte(device->hal_resource);
         
         /* read crc16 */
-        sd_raw_rec_byte(hspi);
-        sd_raw_rec_byte(hspi);
+        device->sd_raw_rec_byte(device->hal_resource);
+        device->sd_raw_rec_byte(device->hal_resource);
 
         if(length < interval)
             break;
@@ -634,10 +585,10 @@ uint8_t sd_raw_read_interval(SPI_HandleTypeDef *hspi, GPIO_TypeDef *GPIOx, uint1
     } while(!finished);
     
     /* deaddress card */
-    unselect_card(GPIOx, GPIO_Pin);
+    device->unselect_card(device->hal_resource);;
 
     /* let card some time to finish */
-    sd_raw_rec_byte(hspi);
+    device->sd_raw_rec_byte(device->hal_resource);
 
     return 1;
 #endif
@@ -658,9 +609,10 @@ uint8_t sd_raw_read_interval(SPI_HandleTypeDef *hspi, GPIO_TypeDef *GPIOx, uint1
  * \returns 0 on failure, 1 on success.
  * \see sd_raw_write_interval, sd_raw_read, sd_raw_read_interval
  */
-uint8_t sd_raw_write(SPI_HandleTypeDef *hspi, GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin, offset_t offset, const uint8_t* buffer, uintptr_t length)
+uint8_t sd_raw_write(void* context, offset_t offset, const uint8_t* buffer, uintptr_t length)
 {
-    if(sd_raw_locked())
+    SD_Device* device = (SD_Device*) context;
+    if(sd_raw_locked(device->hal_resource))
         return 0;
 
     offset_t block_address;
@@ -687,7 +639,7 @@ uint8_t sd_raw_write(SPI_HandleTypeDef *hspi, GPIO_TypeDef *GPIOx, uint16_t GPIO
 
             if(block_offset || write_length < 512)
             {
-                if(!sd_raw_read(hspi, GPIOx, GPIO_Pin, block_address, raw_block, sizeof(raw_block)))
+                if(!sd_raw_read(device, block_address, raw_block, sizeof(raw_block)))
                     return 0;
             }
             raw_block_address = block_address;
@@ -706,36 +658,36 @@ uint8_t sd_raw_write(SPI_HandleTypeDef *hspi, GPIO_TypeDef *GPIOx, uint16_t GPIO
         }
 
         /* address card */
-        select_card(GPIOx, GPIO_Pin);
+        device->select_card(device->hal_resource);;
 
         /* send single block request */
 #if SD_RAW_SDHC
-        if(sd_raw_send_command(hspi, CMD_WRITE_SINGLE_BLOCK, (sd_raw_card_type & (1 << SD_RAW_SPEC_SDHC) ? block_address / 512 : block_address)))
+        if(sd_raw_send_command(device, CMD_WRITE_SINGLE_BLOCK, (sd_raw_card_type & (1 << SD_RAW_SPEC_SDHC) ? block_address / 512 : block_address)))
 #else
         if(sd_raw_send_command(CMD_WRITE_SINGLE_BLOCK, block_address))
 #endif
         {
-            unselect_card(GPIOx, GPIO_Pin);
+            device->unselect_card(device->hal_resource);;
             return 0;
         }
 
         /* send start byte */
-        sd_raw_send_byte(hspi, 0xfe);
+        device->sd_raw_send_byte(device->hal_resource, 0xfe);
 
         /* write byte block */
         for(uint16_t i = 0; i < 512; ++i)
-            sd_raw_send_byte(hspi, *buffer++);
+            device->sd_raw_send_byte(device->hal_resource, *buffer++);
 
         /* write dummy crc16 */
-        sd_raw_send_byte(hspi, 0xff);
-        sd_raw_send_byte(hspi, 0xff);
+        device->sd_raw_send_byte(device->hal_resource, 0xff);
+        device->sd_raw_send_byte(device->hal_resource, 0xff);
 
         /* wait while card is busy */
-        while(sd_raw_rec_byte(hspi) != 0xff);
-        sd_raw_rec_byte(hspi);
+        while(device->sd_raw_rec_byte(device->hal_resource) != 0xff);
+        device->sd_raw_rec_byte(device->hal_resource);
 
         /* deaddress card */
-        unselect_card(GPIOx, GPIO_Pin);
+        device->unselect_card(device->hal_resource);;
 
         buffer += write_length;
         offset += write_length;
@@ -769,8 +721,9 @@ uint8_t sd_raw_write(SPI_HandleTypeDef *hspi, GPIO_TypeDef *GPIOx, uint16_t GPIO
  * \returns 0 on failure, 1 on success
  * \see sd_raw_read_interval, sd_raw_write, sd_raw_read
  */
-uint8_t sd_raw_write_interval(SPI_HandleTypeDef *hspi, GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin, offset_t offset, uint8_t* buffer, uintptr_t length, sd_raw_write_interval_handler_t callback, void* p)
+uint8_t sd_raw_write_interval(void* context, offset_t offset, uint8_t* buffer, uintptr_t length, sd_raw_write_interval_handler_t callback, void* p)
 {
+    SD_Device* device = (SD_Device*) context;
 #if SD_RAW_SAVE_RAM
     #error "SD_RAW_WRITE_SUPPORT is not supported together with SD_RAW_SAVE_RAM"
 #endif
@@ -790,7 +743,7 @@ uint8_t sd_raw_write_interval(SPI_HandleTypeDef *hspi, GPIO_TypeDef *GPIOx, uint
         /* as writing is always buffered, we directly
          * hand over the request to sd_raw_write()
          */
-        if(!sd_raw_write(hspi, GPIOx, GPIO_Pin, offset, buffer, bytes_to_write))
+        if(!sd_raw_write(device, offset, buffer, bytes_to_write))
             return 0;
 
         offset += bytes_to_write;
@@ -842,25 +795,25 @@ uint8_t sd_raw_sync()
  * \param[in] info A pointer to the structure into which to save the information.
  * \returns 0 on failure, 1 on success.
  */
-uint8_t sd_raw_get_info(SPI_HandleTypeDef *hspi, GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin, struct sd_raw_info* info)
+uint8_t sd_raw_get_info(SD_Device* device, struct sd_raw_info* info)
 {
-    if(!info || !sd_raw_available())
+    if(!info || !sd_raw_available(device->hal_resource))
         return 0;
 
     memset(info, 0, sizeof(*info));
 
-    select_card(GPIOx, GPIO_Pin);
+    device->select_card(device->hal_resource);;
 
     /* read cid register */
-    if(sd_raw_send_command(hspi, CMD_SEND_CID, 0))
+    if(sd_raw_send_command(device->hal_resource, CMD_SEND_CID, 0))
     {
-        unselect_card(GPIOx, GPIO_Pin);
+        device->unselect_card(device->hal_resource);;
         return 0;
     }
-    while(sd_raw_rec_byte(hspi) != 0xfe);
+    while(device->sd_raw_rec_byte(device->hal_resource) != 0xfe);
     for(uint8_t i = 0; i < 18; ++i)
     {
-        uint8_t b = sd_raw_rec_byte(hspi);
+        uint8_t b = device->sd_raw_rec_byte(device->hal_resource);
 
         switch(i)
         {
@@ -906,15 +859,15 @@ uint8_t sd_raw_get_info(SPI_HandleTypeDef *hspi, GPIO_TypeDef *GPIOx, uint16_t G
     uint32_t csd_c_size = 0;
 #endif
     uint8_t csd_structure = 0;
-    if(sd_raw_send_command(hspi, CMD_SEND_CSD, 0))
+    if(sd_raw_send_command(device, CMD_SEND_CSD, 0))
     {
-        unselect_card(GPIOx, GPIO_Pin);
+        device->unselect_card(device->hal_resource);;
         return 0;
     }
-    while(sd_raw_rec_byte(hspi) != 0xfe);
+    while(device->sd_raw_rec_byte(device->hal_resource) != 0xfe);
     for(uint8_t i = 0; i < 18; ++i)
     {
-        uint8_t b = sd_raw_rec_byte(hspi);
+        uint8_t b = device->sd_raw_rec_byte(device->hal_resource);
 
         if(i == 0)
         {
@@ -985,7 +938,7 @@ uint8_t sd_raw_get_info(SPI_HandleTypeDef *hspi, GPIO_TypeDef *GPIOx, uint16_t G
         }
     }
 
-    unselect_card(GPIOx, GPIO_Pin);
+    device->unselect_card(device->hal_resource);;
 
     return 1;
 }

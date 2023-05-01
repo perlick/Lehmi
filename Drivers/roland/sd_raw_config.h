@@ -70,50 +70,6 @@ extern "C"
 /**
  * @}
  */
-
-/* defines for customisation of sd/mmc port access */
-#if defined(__AVR_ATmega8__) || \
-    defined(__AVR_ATmega48__) || \
-    defined(__AVR_ATmega48P__) || \
-    defined(__AVR_ATmega88__) || \
-    defined(__AVR_ATmega88P__) || \
-    defined(__AVR_ATmega168__) || \
-    defined(__AVR_ATmega168P__) || \
-    defined(__AVR_ATmega328P__)
-    #define configure_pin_mosi() DDRB |= (1 << DDB3)
-    #define configure_pin_sck() DDRB |= (1 << DDB5)
-    #define configure_pin_ss() DDRB |= (1 << DDB2)
-    #define configure_pin_miso() DDRB &= ~(1 << DDB4)
-
-    #define select_card() PORTB &= ~(1 << PORTB2)
-    #define unselect_card() PORTB |= (1 << PORTB2)
-#elif defined(__AVR_ATmega16__) || \
-      defined(__AVR_ATmega32__)
-    #define configure_pin_mosi() DDRB |= (1 << DDB5)
-    #define configure_pin_sck() DDRB |= (1 << DDB7)
-    #define configure_pin_ss() DDRB |= (1 << DDB4)
-    #define configure_pin_miso() DDRB &= ~(1 << DDB6)
-
-    #define select_card() PORTB &= ~(1 << PORTB4)
-    #define unselect_card() PORTB |= (1 << PORTB4)
-#elif defined(__AVR_ATmega64__) || \
-      defined(__AVR_ATmega128__) || \
-      defined(__AVR_ATmega169__)
-    #define configure_pin_mosi() DDRB |= (1 << DDB2)
-    #define configure_pin_sck() DDRB |= (1 << DDB1)
-    #define configure_pin_ss() DDRB |= (1 << DDB0)
-    #define configure_pin_miso() DDRB &= ~(1 << DDB3)
-
-    #define select_card() PORTB &= ~(1 << PORTB0)
-    #define unselect_card() PORTB |= (1 << PORTB0)
-#endif
-
-#define configure_pin_available() DDRC &= ~(1 << DDC4)
-#define configure_pin_locked() DDRC &= ~(1 << DDC5)
-
-#define get_pin_available() (PINC & (1 << PINC4))
-#define get_pin_locked() (PINC & (1 << PINC5))
-
 #if SD_RAW_SDHC
     typedef uint64_t offset_t;
 #else

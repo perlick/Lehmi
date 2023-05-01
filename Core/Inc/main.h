@@ -29,6 +29,8 @@ extern "C" {
 /* Includes ------------------------------------------------------------------*/
 #include "stm32f0xx_hal.h"
 #include "sd_raw.h"
+#include "partition.h"
+#include "fat.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -59,6 +61,12 @@ void Error_Handler(void);
 
 /* Private defines -----------------------------------------------------------*/
 /* USER CODE BEGIN Private defines */
+typedef struct __spi_gpio_hal_resource
+{
+  SPI_HandleTypeDef *hspi;
+  GPIO_TypeDef* GPIO;
+  uint16_t GPIO_Pin;
+} SPI_GPIO_HAL_Resource;
 
 /* USER CODE END Private defines */
 

@@ -51,6 +51,22 @@ extern "C"
 #define SD_RAW_FORMAT_UNKNOWN 3
 
 /**
+ * Required SD device interface
+ */
+typedef struct __sd_device
+{
+    void* hal_resource;
+    uint8_t (*get_pin_available)(void* hal_resource);
+    uint8_t (*get_pin_locked)(void* hal_resource);
+    void (*select_card)(void* hal_resource);
+    void (*unselect_card)(void* hal_resource);
+    void (*set_freq_high)(void* hal_resource);
+    uint8_t (*sd_raw_rec_byte)(void* hal_resource);
+    void (*sd_raw_send_byte)(void* hal_resource, uint8_t tx_data);
+
+} SD_Device;
+
+/**
  * This struct is used by sd_raw_get_info() to return
  * manufacturing and status information of the card.
  */
@@ -125,17 +141,17 @@ struct sd_raw_info
 typedef uint8_t (*sd_raw_read_interval_handler_t)(uint8_t* buffer, offset_t offset, void* p);
 typedef uintptr_t (*sd_raw_write_interval_handler_t)(uint8_t* buffer, offset_t offset, void* p);
 
-uint8_t sd_raw_init(SPI_HandleTypeDef *hspi, GPIO_TypeDef* GPIOx, uint16_t GPIO_Pin);
-uint8_t sd_raw_available();
-uint8_t sd_raw_locked();
+uint8_t sd_raw_init(SD_Device* device);
+uint8_t sd_raw_available(SD_Device* device);
+uint8_t sd_raw_locked(SD_Device* device);
 
-uint8_t sd_raw_read(SPI_HandleTypeDef *hspi, GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin, offset_t offset, uint8_t* buffer, uintptr_t length);
-uint8_t sd_raw_read_interval(SPI_HandleTypeDef *hspi, GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin, offset_t offset, uint8_t* buffer, uintptr_t interval, uintptr_t length, sd_raw_read_interval_handler_t callback, void* p);
-uint8_t sd_raw_write(SPI_HandleTypeDef *hspi, GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin, offset_t offset, const uint8_t* buffer, uintptr_t length);
-uint8_t sd_raw_write_interval(SPI_HandleTypeDef *hspi, GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin, offset_t offset, uint8_t* buffer, uintptr_t length, sd_raw_write_interval_handler_t callback, void* p);
+uint8_t sd_raw_read(void* context, offset_t offset, uint8_t* buffer, uintptr_t length);
+uint8_t sd_raw_read_interval(void* context, offset_t offset, uint8_t* buffer, uintptr_t interval, uintptr_t length, sd_raw_read_interval_handler_t callback, void* p);
+uint8_t sd_raw_write(void* cntext, offset_t offset, const uint8_t* buffer, uintptr_t length);
+uint8_t sd_raw_write_interval(void* context, offset_t offset, uint8_t* buffer, uintptr_t length, sd_raw_write_interval_handler_t callback, void* p);
 uint8_t sd_raw_sync();
 
-uint8_t sd_raw_get_info(SPI_HandleTypeDef *hspi, GPIO_TypeDef *GPIOx, uint16_t GPIO_Pin, struct sd_raw_info* info);
+uint8_t sd_raw_get_info(SD_Device* device, struct sd_raw_info* info);
 
 /**
  * @}

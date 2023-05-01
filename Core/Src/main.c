@@ -23,14 +23,27 @@ void SystemClock_Config(void);
 void ADC_Config(void);
 void TMP_Config(void);
 void SPI_Config(void);
+void UART_Config(void);
+void SD_Setup(void);
+void MEM_Setup(void);
+
+uint8_t get_pin_available(void* hal_resource);
+uint8_t get_pin_locked(void* hal_resource);
+void select_card(void* hal_resource);
+void unselect_card(void* hal_resource);
+void set_freq_high(void* hal_resource);
+uint8_t sd_raw_rec_byte(void* hal_resource);
+void sd_raw_send_byte(void* hal_resource, uint8_t tx_data);
 
 ADC_HandleTypeDef hadc;
 GPIO_InitTypeDef GPIO_Init;
 SPI_HandleTypeDef hspi;
+UART_HandleTypeDef huart;
+SPI_GPIO_HAL_Resource bb_spi_dev;
+SD_Device sd;
+MEM_Device sd_mem_device;
 
-__IO uint16_t ADCValue=0;
-__IO float temp_c=0;
-__IO uint8_t byte;
+volatile intptr_t n;
 
 #define noop
 
@@ -41,20 +54,24 @@ int main(void)
   TMP_Config();
   ADC_Config();
   SPI_Config();
+  UART_Config();
+  SD_Setup();
   
-  uint8_t tx_buffer[512];
-  uint8_t rx_buffer[512];
 
+  sd_raw_init(&sd);
+  partition_struct* part = partition_open(&sd_mem_device, 0);
+  part->type = PARTITION_TYPE_FAT32;
+  part->offset = 0x0;
+  part->length = 229297;
+  fat_fs_struct* fat_fs = fat_open(part);
+  fat_dir_entry_struct file_entry;
+  fat_get_dir_entry_of_path(fat_fs, "/hello_world.txt", &file_entry);
+  fat_file_struct* fd = fat_open_file(fat_fs, &file_entry);
+  uint8_t file_buffer[512];
+  n = fat_read_file(fd, file_buffer, 512);
 
-  sd_raw_init(&hspi, GPIOB, GPIO_PIN_12);
-
-  int i = 0;
   while (1)
   {
-    tx_buffer[i] = i % 255;
-    sd_raw_read(&hspi, GPIOB, GPIO_PIN_12, i*512, rx_buffer, 512);
-    sd_raw_write(&hspi, GPIOB, GPIO_PIN_12, i*512, tx_buffer, 512);
-    i++;
 
     // HAL_ADCEx_Calibration_Start(&hadc);
     // HAL_ADC_Start(&hadc);
@@ -156,6 +173,10 @@ void TMP_Config()
 
 void SPI_Config()
 {
+  bb_spi_dev.GPIO = GPIOB;
+  bb_spi_dev.GPIO_Pin = GPIO_PIN_12;
+  bb_spi_dev.hspi = &hspi;
+
   hspi.Instance = SPI2;
   hspi.Init.Mode = SPI_MODE_MASTER;
   hspi.Init.Direction = SPI_DIRECTION_2LINES;
@@ -169,11 +190,11 @@ void SPI_Config()
   hspi.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
   HAL_SPI_Init(&hspi);
 
-  GPIO_Init.Pin = GPIO_PIN_12;
+  GPIO_Init.Pin = bb_spi_dev.GPIO_Pin;
   GPIO_Init.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_Init.Pull = GPIO_NOPULL;
   GPIO_Init.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOB, &GPIO_Init);
+  HAL_GPIO_Init(bb_spi_dev.GPIO, &GPIO_Init);
 }
 
 void HAL_SPI_MspInit(SPI_HandleTypeDef *hspi)
@@ -193,6 +214,67 @@ void HAL_SPI_MspInit(SPI_HandleTypeDef *hspi)
   GPIO_Init.Pin = GPIO_PIN_15;
   GPIO_Init.Mode = GPIO_MODE_AF_PP;
   HAL_GPIO_Init(GPIOB, &GPIO_Init);
+}
+
+void UART_Config()
+{
+  
+}
+
+void SD_Setup()
+{
+  /* struct which sd_raw will pass when calling hal functions */
+  sd.hal_resource = &bb_spi_dev;
+  /* functions sd_raw uses to talk to hal */
+  sd.get_pin_available = get_pin_available;
+  sd.get_pin_locked = get_pin_locked;
+  sd.select_card = select_card;
+  sd.unselect_card = unselect_card;
+  sd.set_freq_high = set_freq_high;
+  sd.sd_raw_rec_byte = sd_raw_rec_byte;
+  sd.sd_raw_send_byte = sd_raw_send_byte;
+  /* define underlying functions for partition manager */
+  sd_mem_device.context = &sd;
+  sd_mem_device.device_read = sd_raw_read;
+  sd_mem_device.device_read_interval = sd_raw_read_interval;
+  sd_mem_device.device_write = sd_raw_write;
+  sd_mem_device.device_write_interval = sd_raw_write_interval;
+}
+
+uint8_t get_pin_available(void* hal_resource)
+{
+  return 0x00;
+}
+uint8_t get_pin_locked(void* hal_resource)
+{
+  return 0x01;
+}
+void select_card(void* hal_resource)
+{
+  SPI_GPIO_HAL_Resource* hr = (SPI_GPIO_HAL_Resource*) hal_resource;
+  HAL_GPIO_WritePin(hr->GPIO, hr->GPIO_Pin, GPIO_PIN_RESET);
+}
+void unselect_card(void* hal_resource)
+{
+  SPI_GPIO_HAL_Resource* hr = (SPI_GPIO_HAL_Resource*) hal_resource;
+  HAL_GPIO_WritePin(hr->GPIO, hr->GPIO_Pin, GPIO_PIN_SET);
+}
+void set_freq_high(void* hal_resource)
+{
+
+}
+uint8_t sd_raw_rec_byte(void* hal_resource)
+{
+  SPI_GPIO_HAL_Resource* hr = (SPI_GPIO_HAL_Resource*) hal_resource;
+  uint8_t tx_data = 0xff;
+  uint8_t rx_data = 0x00;
+  HAL_SPI_TransmitReceive(hr->hspi, &tx_data, &rx_data, 1, 5000);
+  return rx_data;
+}
+void sd_raw_send_byte(void* hal_resource, uint8_t tx_data){
+  SPI_GPIO_HAL_Resource* hr = (SPI_GPIO_HAL_Resource*) hal_resource;
+  uint8_t rx_data = 0x00;
+  HAL_SPI_TransmitReceive(hr->hspi, &tx_data, &rx_data, 1, 5000);
 }
 
 /**
